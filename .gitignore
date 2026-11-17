@@ -1,0 +1,9 @@
+# сырые выгрузки GA и промежуточные файлы сборки
+raw/
+work/
+*.xlsx
+*.pkl
+# несжатые данные локальной сборки (в репозитории — data/sessions.json.gz)
+data/sessions.json
+__pycache__/
+.DS_Store
