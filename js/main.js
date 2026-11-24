@@ -1,7 +1,7 @@
 /* routing, page header, filters, search, theme, startup */
 'use strict';
-const ROUTES={overview:renderOverview,heatmaps:renderHeatmaps,recordings:renderRecordings,funnels:renderFunnels,journeys:renderJourneys,frustration:renderFrustration,trends:renderTrends,findings:renderFindings};
-const ROUTE_NAMES={overview:'Обзор',heatmaps:'Тепловые карты',recordings:'Записи сессий',funnels:'Воронки',journeys:'Пути',frustration:'Фрустрация',trends:'Тренды',findings:'Выводы'};
+const ROUTES={overview:renderOverview,heatmaps:renderHeatmaps,recordings:renderRecordings,funnels:renderFunnels,leaks:renderLeaks,journeys:renderJourneys,frustration:renderFrustration,trends:renderTrends,compare:renderCompare,findings:renderFindings};
+const ROUTE_NAMES={overview:'Обзор',heatmaps:'Тепловые карты',recordings:'Записи сессий',funnels:'Воронки',leaks:'Проблемы воронок',journeys:'Пути',frustration:'Фрустрация',trends:'Тренды',compare:'Сравнение периодов',findings:'Выводы'};
 let ROUTE='overview';
 function render(){
   const h=location.hash.slice(1);ROUTE=ROUTES[h]?h:'overview';
@@ -10,7 +10,8 @@ function render(){
   hideTip();closeDrawerSilently();
   ROUTES[ROUTE]();
   hoistHead();
-  $('#fbar').classList.toggle('dim',ROUTE==='findings');
+  $('#fbar').classList.toggle('dim',ROUTE==='findings');$('#fbar').classList.toggle('dim-date',ROUTE==='compare');
+  $('#dp-btn').title=ROUTE==='compare'?'На странице сравнения периоды выбираются ниже':'';
 }
 // move the module's title and description into the page header; other controls stay at the top of the content
 function hoistHead(){
@@ -29,15 +30,15 @@ function updateCounts(){
   const n=ACT.length;$('#f-count').innerHTML=`<b>${fmt(n)}</b> ${plural(n,'сессия','сессии','сессий')} · <b>${fmt(uniqUsers(ACT))}</b> польз.`;
   let fr=0;for(const s of ACT)if(S_sc[s]>=3)fr++;$('#frus-bdg').textContent=fr?fmt(fr):'';$('#btn-bell .dot').hidden=!fr;
   $('#dp-label').textContent=rangeText();
-  $('#f-reset').hidden=F.d0===0&&F.d1===LAST&&F.dev==='all'&&F.au==='all'&&F.co==='all'&&F.sr==='all';
+  $('#f-reset').hidden=F.d0===0&&F.d1===LAST&&F.dev==='all'&&F.au==='all'&&F.co==='all'&&F.sr==='all'&&F.bot==='hide';
 }
-function syncFilterUI(){$('#f-dev').value=F.dev;$('#f-au').value=F.au;$('#f-co').value=F.co;$('#f-sr').value=F.sr}
+function syncFilterUI(){$('#f-dev').value=F.dev;$('#f-au').value=F.au;$('#f-co').value=F.co;$('#f-sr').value=F.sr;$('#f-bot').value=F.bot}
 function refreshAll(){applyFilters();updateCounts();render()}
 
-/* date picker: 26.10–15.11, days without an export are disabled */
-const DAYS_ALL=['2026-10-26','2026-10-27','2026-10-28','2026-10-29','2026-10-30','2026-10-31','2026-11-01','2026-11-02','2026-11-03','2026-11-04','2026-11-05','2026-11-06','2026-11-07','2026-11-08','2026-11-09','2026-11-10','2026-11-11','2026-11-12','2026-11-13','2026-11-14','2026-11-15'];
+/* date picker: 26.10–23.11, days without an export are disabled */
+const DAYS_ALL=(()=>{const o=[];for(let t=Date.UTC(2026,9,26);t<=Date.UTC(2026,10,23);t+=86400000)o.push(new Date(t).toISOString().slice(0,10));return o})();
 let pend=null;
-const PRE=()=>[['Весь период',0,LAST],['26–28 окт',0,2],['2–4 ноя',3,5],['6–9 ноя',6,9],['11–15 ноя',10,14],['26.10–9.11',0,9]];
+const PRE=()=>[['Весь период',0,LAST],['26–28 окт',0,2],['2–4 ноя',3,5],['6–9 ноя',6,9],['11–15 ноя',10,14],['20–23 ноя',15,18],['26.10–15.11',0,14]];
 function drawPicker(){
   const [a,b]=pend||[F.d0,F.d1];
   $('#dp-pre').innerHTML=PRE().map(([l,x,y])=>`<button type="button" data-a="${x}" data-b="${y}" aria-pressed="${a===x&&b===y}">${l}</button>`).join('');
@@ -56,7 +57,7 @@ function effTheme(){const t=document.documentElement.dataset.theme;return t||(ma
 function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('si-theme',t)}catch(e){}
   $('#btn-theme').innerHTML=t==='dark'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   $('#btn-theme').setAttribute('aria-label',t==='dark'?'Светлая тема':'Тёмная тема');
-  if(ACT&&(ROUTE==='heatmaps'||ROUTE==='overview'||ROUTE==='trends'||ROUTE==='funnels'))render()}
+  if(ACT&&(ROUTE==='heatmaps'||ROUTE==='overview'||ROUTE==='trends'||ROUTE==='funnels'||ROUTE==='compare'))render()}
 
 /* search: sections, pages, elements, signals */
 let QIDX=null,QSEL=0,QRES=[];
@@ -92,13 +93,14 @@ function pickSearch(i){const it=QRES[i];if(!it)return;$('#q').value='';$('#q-res
 function openMethod(){
   openDrawer(`<div class="dw-h"><div><h3 id="dw-t">Как считаем</h3><p>Источник — выгрузки GA4 / GTM из папки Analytics</p></div><button type="button" class="xbtn" aria-label="Закрыть">×</button></div>
   <dl>
-   <dt>Данные</dt><dd>26–28.10, 2–4.11, 6–9.11 и 11–15.11.2026 (9.11 — до 17:00 UTC, 15.11 — до 19:57 UTC). 29.10–1.11, 5.11 и 10.11 в выгрузках нет. Только домен slottica.com, все языки, бренд Slottica: ${fmt(NS)} сессий, ${fmt(NE)} событий.</dd>
+   <dt>Данные</dt><dd>26–28.10, 2–4.11, 6–9.11, 11–15.11 и 20–23.11.2026 (9.11 — до 17:00 UTC, 15.11 — до 19:57 UTC, 23.11 — до 14:27 UTC). 29.10–1.11, 5.11, 10.11 и 16–19.11 в выгрузках нет. Только домен slottica.com, все языки, бренд Slottica: ${fmt(NS)} сессий, ${fmt(NE)} событий.</dd>
    <dt>Сессия и пользователь</dt><dd>Сессия — user_pseudo_id + session_id. «Игрок в аккаунте» — если user_id есть хотя бы у одного события сессии, «гость» — если нет ни у одного.</dd>
+   <dt>Подозрительный трафик</dt><dd>По умолчанию скрыт. Признак бота — пользователь-гость на десктопе с 5+ сессиями, который видит только главную и не делает ничего, кроме отправки формы регистрации. В 20–23.11 это 828 сессий от 34 пользователей — 7,5% трафика выгрузки (Кипр, Германия, Украина, Великобритания; Windows, английский язык, равномерно круглые сутки) — похоже на автоматическую проверку регистрации или спам-регистрации. Показать их можно фильтром «Весь трафик» или «Только боты».</dd>
    <dt>Клики</dt><dd>Все события взаимодействия (game_item_click, navigation_click, banner_click и др.), кроме page_view, cashbox_deposit и возвратов с оплаты. Одинаковые события чаще, чем раз в 0,1 с, считаются дублем трекинга и убраны.</dd>
    <dt>Оплата</dt><dd>Возврат с оплаты — page_view с параметром success=true/false, пришедший с платёжного шлюза (по page_referrer, а в 6–9.11 — по traffic_source_event).</dd>
    <dt>Сигналы фрустрации</dt><dd>Rage — 3+ одинаковых клика за ≤5 с; повтор — 2 клика с паузой ≤2,5 с; U-turn — A → B → A, на B ≤7 с; быстрый выход из игры — страница игры ≤10 с; страница ошибки — /error/*; отказ от регистрации — закрытие формы или окна прерывания; поиск без выбора — search_close; быстрый уход — одна страница, ни одного клика, меньше 10 с. Оценка 1–5 — взвешенная сумма сигналов сессии.</dd>
    <dt>Тепловые карты и скролл</dt><dd>Зоны на скриншотах — элементы, которые отправляют события в GTM. Скролл восстановлен по самому нижнему блоку с кликом: это нижняя оценка глубины.</dd>
-   <dt>Ограничения выгрузок</dt><dd>6–9.11: нет событий кассы, окон регистрации, фильтров, промо-блока, турниров, вкладок поиска и first_visit; нет ОС, города и реферера. 11–15.11: у cashbox_deposit нет source, у filters_tag_select нет выбранного значения, источник трафика в 60% сессий «(not set)»; session_start и sign_up_submit не используются (дублируют начало сессии и отправку формы).</dd>
+   <dt>Ограничения выгрузок</dt><dd>6–9.11: нет событий кассы, окон регистрации, фильтров, промо-блока, турниров, вкладок поиска и first_visit; нет ОС, города и реферера. 11–15.11: у cashbox_deposit нет source, у filters_tag_select нет выбранного значения, источник трафика в 60% сессий «(not set)»; session_start и sign_up_submit не используются (дублируют начало сессии и отправку формы). 20–23.11: у cashbox_deposit по-прежнему нет source, выбранный провайдер в фильтрах снова передаётся, источник не определён у 55% сессий (было 60%); новое событие scroll_depth (25/50/75/90%) пока используется только в выводах.</dd>
   </dl>`);
 }
 
@@ -109,8 +111,9 @@ function initUI(){
   $('#f-co').innerHTML='<option value="all">Все страны</option>'+Object.entries(co).filter(([c])=>+c>=0).sort((a,b)=>b[1]-a[1]).map(([c,n])=>`<option value="${c}">${esc(coName(+c))} · ${fmt(n)}</option>`).join('');
   const sr={};for(let s=0;s<NS;s++)sr[S_sr[s]]=(sr[S_sr[s]]||0)+1;
   $('#f-sr').innerHTML='<option value="all">Все источники</option>'+Object.entries(sr).sort((a,b)=>b[1]-a[1]).map(([c,n])=>`<option value="${c}">${esc(DB.src[+c])} · ${fmt(n)}</option>`).join('');
-  sel('f-co','co');sel('f-sr','sr');
-  $('#f-reset').onclick=()=>{Object.assign(F,{d0:0,d1:LAST,dev:'all',au:'all',co:'all',sr:'all'});syncFilterUI();refreshAll()};
+  sel('f-co','co');sel('f-sr','sr');sel('f-bot','bot');
+  {let nb=0;for(let s=0;s<NS;s++)if(S_bt[s])nb++;$('#f-bot').options[2].textContent=`Только боты · ${fmt(nb)}`;if(!nb)$('#f-bot').hidden=true}
+  $('#f-reset').onclick=()=>{Object.assign(F,{d0:0,d1:LAST,dev:'all',au:'all',co:'all',sr:'all',bot:'hide'});syncFilterUI();refreshAll()};
   $('#dp-btn').addEventListener('click',e=>{e.stopPropagation();openPicker($('#dp-pop').hidden)});
   $('#dp-pop').addEventListener('click',e=>{e.stopPropagation();
     const pb=e.target.closest('#dp-pre button');if(pb){setRange(+pb.dataset.a,+pb.dataset.b);return}

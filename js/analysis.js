@@ -13,8 +13,9 @@ function sessionStats(list){
     if(g){game++;day.game[d]++;ttg.push(firstGame)}if(c){cash++;day.cash[d]++}if(po){paySess++;day.pay[d]++}if(S_sc[s]>=3){frus++;day.frus[d]++}}
   return {n:list.length,users:uniqUsers(list),pv,cl,game,cash,payok,payfail,paySess,frus,medDur:median(durs),medTTG:median(ttg),day};
 }
-// exports: 26–28.10 (days 0–2), 2–4.11 (3–5), 6–9.11 (6–9). Compare the latest export in range with the earlier ones in range.
-const EXPORTS=[[0,2,'26.10','28.10'],[3,5,'2.11','4.11'],[6,9,'6.11','9.11'],[10,14,'11.11','15.11']];
+// exports: 26–28.10 (days 0–2), 2–4.11 (3–5), 6–9.11 (6–9), 11–15.11 (10–14), 20–23.11 (15–18). Compare the latest export in range with the earlier ones in range.
+const EXPORTS=[[0,2,'26.10','28.10'],[3,5,'2.11','4.11'],[6,9,'6.11','9.11'],[10,14,'11.11','15.11'],[15,18,'20.11','23.11']];
+const CUR0=()=>EXPORTS[EXPORTS.length-1][0];
 function compareSets(){
   const inR=EXPORTS.map(([a,b,s,e])=>{const d0=Math.max(a,F.d0),d1=Math.min(b,F.d1);return d0<=d1?{d0,d1,s,e,l:s+'–'+e,n:d1-d0+1}:null}).filter(Boolean);
   if(inR.length<2)return null;
@@ -22,7 +23,7 @@ function compareSets(){
   const pick=f=>ACT.filter(s=>f(S_d[s]));
   const B=pick(d=>d>=last.d0&&d<=last.d1),A=pick(d=>prev.some(p=>d>=p.d0&&d<=p.d1));
   const lab=prev[0].s+'–'+prev[prev.length-1].e;
-  // sessions per day are taken over full days only (28.10, 4.11, 9.11 and 15.11 are cut short in the exports)
+  // sessions per day are taken over full days only (28.10, 4.11, 9.11, 15.11 and 23.11 are cut short in the exports)
   const full=arr=>{const ds=new Set(arr.map(s=>S_d[s]).filter(d=>!PARTIAL.has(d)));let c=0;for(const s of arr)if(ds.has(S_d[s]))c++;return ds.size?c/ds.size:arr.length/Math.max(1,new Set(arr.map(s=>S_d[s])).size)};
   return {A:sessionStats(A),B:sessionStats(B),nA:prev.reduce((s,p)=>s+p.n,0),nB:last.n,labA:lab,labB:last.l,dA:full(A),dB:full(B)};
 }
@@ -104,7 +105,7 @@ const W_RENDER={
  },
  insights(host,st){renderInsights(st,host)},
  geo(host,st){const co={};for(const s of ACT)co[S_co[s]]=(co[S_co[s]]||0)+1;host.innerHTML=hbars(Object.entries(co).map(([c,n])=>[coName(+c),n]).sort((a,b)=>b[1]-a[1]).slice(0,6),{total:st.n})},
- sources(host,st){const sr={};for(const s of ACT)sr[S_sr[s]]=(sr[S_sr[s]]||0)+1;host.innerHTML=hbars(Object.entries(sr).map(([c,n])=>[DB.src[+c],n]).sort((a,b)=>b[1]-a[1]),{total:st.n})+'<p class="note">В выгрузках 6–9.11 и 11–15.11 источник часто не заполнен — «Нет данных».</p>'},
+ sources(host,st){const sr={};for(const s of ACT)sr[S_sr[s]]=(sr[S_sr[s]]||0)+1;host.innerHTML=hbars(Object.entries(sr).map(([c,n])=>[DB.src[+c],n]).sort((a,b)=>b[1]-a[1]),{total:st.n})+'<p class="note">С 6.11 источник часто не заполнен — «Нет данных» (в 20–23.11 — больше половины сессий).</p>'},
  pay(host,st,cmp,days){
   const ok=new Array(DAYS.length).fill(0),bad=new Array(DAYS.length).fill(0);for(const s of ACT){const a=S_e0[s],b=a+S_en[s];for(let e=a;e<b;e++){if(E_k[e]===15)ok[S_d[s]]++;else if(E_k[e]===16)bad[S_d[s]]++}}
   const t=st.payok+st.payfail;

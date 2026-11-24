@@ -1,12 +1,13 @@
 import pandas as pd, numpy as np, json, sys
 pd.set_option('display.width',250)
 s=pd.read_pickle('work/events_final.pkl'); S=pd.read_pickle('work/sessions_final.pkl')
+S=S[S.bot==0];s=s[s.key.isin(S.index)]  # suspected bots excluded
 s=s.reset_index(drop=True)
 s['day']=s.key.map(S.day); s['dev']=s.key.map(S.devi); s['au']=s.key.map(S.auth); s['user']=s.key.map(S.user)
 CLICKX={'page_view','cashbox_deposit','pay_ok','pay_fail','first_visit'}
 s['isclick']=~s.event.isin(CLICKX)
 s['isgame']=s.np.str.startswith('/game/')&s.np.str.endswith('/real')
-FULL=[0,1,3,4,6,7,8,10,11,12,13]  # full days (28.10, 4.11, 9.11, 15.11 partial)
+FULL=[0,1,3,4,6,7,8,10,11,12,13,15,16,17]  # full days (28.10, 4.11, 9.11, 15.11, 23.11 partial)
 def M(days,label):
     D=set(days);ss=S[S.day.isin(D)];e=s[s.day.isin(D)];n=len(ss);r={'label':label,'sessions':n,'users':ss.user.nunique()}
     full=[d for d in days if d in FULL];r['sess_day_full']=round(len(S[S.day.isin(full)])/max(1,len(full)),0) if full else None
@@ -144,6 +145,6 @@ def M(days,label):
     r['flt_sessions_days']=len(fd)
     return r
 out={}
-for lab,days in [('all',list(range(15))),('cur',[10,11,12,13,14]),('base',list(range(10))),('p12',list(range(6))),('p3',[6,7,8,9])]:
+for lab,days in [('all',list(range(19))),('cur',[15,16,17,18]),('base',list(range(15))),('prev',[10,11,12,13,14]),('p12',list(range(6))),('p3',[6,7,8,9])]:
     out[lab]=M(days,lab);print(lab,'done',flush=True)
 json.dump(out,open('work/metrics.json','w'),ensure_ascii=False,indent=0,default=lambda o:int(o) if isinstance(o,(np.integer,)) else float(o))

@@ -14,7 +14,7 @@ function plural(n,a,b,c){n=Math.abs(n)%100;const n1=n%10;if(n>10&&n<20)return c;
 
 /* ---------- data ---------- */
 let DB=null, NS=0, NE=0;
-let S_d,S_t,S_dur,S_dv,S_au,S_co,S_sr,S_lg,S_os,S_u,S_e0,S_en,S_sc,S_fl;
+let S_d,S_t,S_dur,S_dv,S_au,S_co,S_sr,S_lg,S_os,S_u,S_e0,S_en,S_sc,S_fl,S_bt;
 let E_t,E_p,E_z,E_k,E_f,E_s;
 let EL=[],PG=[],DAYS=[],DAYL=[],EV=[],LAST=0,DAYGAP=[],PARTIAL=new Set();
 const K={PV:0,GAME:1,NAV:2,CASH:3,BANNER:4,PROMO:5,PROV:6,TOUR:7,MORE:8,TITLE:9,PERIOD:10,FILT:11,SEARCH:12,MODAL:13,MCLOSE:14,PAYOK:15,PAYFAIL:16,OTHER:17};
@@ -39,16 +39,13 @@ const SIGNALS=[
 ];
 const SEVC={crit:'var(--crit)',serious:'var(--serious)',warn:'var(--warn)'};
 
-// data/sessions.json.gz (репозиторий / GitHub Pages) или data/sessions.json (локальная сборка)
+// data/sessions.json.gz (compressed, ~5× smaller) with a fallback to data/sessions.json
 async function fetchDB(){
-  let r=await fetch('data/sessions.json.gz');
-  if(r.ok){
-    const buf=new Uint8Array(await r.arrayBuffer());
-    if(buf[0]===0x1f&&buf[1]===0x8b){
-      const ds=new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
-      return JSON.parse(await new Response(ds).text());
-    }
-    return JSON.parse(new TextDecoder().decode(buf));
+  let r=null;try{r=await fetch('data/sessions.json.gz')}catch(e){r=null}
+  if(r&&r.ok&&typeof DecompressionStream!=='undefined'){
+    try{const buf=new Uint8Array(await r.arrayBuffer());
+      if(buf[0]===0x1f&&buf[1]===0x8b){const ds=new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(ds).text())}
+      return JSON.parse(new TextDecoder().decode(buf))}catch(e){/* fall back to plain JSON */}
   }
   r=await fetch('data/sessions.json');if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
@@ -58,7 +55,7 @@ async function loadData(){
   const S=DB.S,E=DB.E;NS=S.d.length;NE=E.p.length;
   S_d=Int8Array.from(S.d);S_t=Int32Array.from(S.t);S_dur=Int32Array.from(S.dur);S_dv=Int8Array.from(S.dv);S_au=Int8Array.from(S.au);
   S_co=Int16Array.from(S.co);S_sr=Int8Array.from(S.sr);S_lg=Int16Array.from(S.lg);S_os=Int16Array.from(S.os);S_u=Int32Array.from(S.u);
-  S_e0=Int32Array.from(S.e0);S_en=Int32Array.from(S.en);S_sc=Int8Array.from(S.sc);S_fl=Int32Array.from(S.fl);
+  S_e0=Int32Array.from(S.e0);S_en=Int32Array.from(S.en);S_sc=Int8Array.from(S.sc);S_fl=Int32Array.from(S.fl);S_bt=S.bt?Int8Array.from(S.bt):new Int8Array(NS);
   EL=DB.el;PG=DB.pages;DAYS=DB.meta.days;EV=DB.ev;
   EL.forEach((e,i)=>{if(i)ELIDX[e[0]]=i});
   E_p=Int32Array.from(E.p);E_z=Int16Array.from(E.z);E_k=new Int8Array(NE);E_t=new Int32Array(NE);E_f=new Int16Array(NE);E_s=new Int32Array(NE);
@@ -69,7 +66,7 @@ async function loadData(){
   DAYL=DAYS.map(d=>{const [y,m,dd]=d.split('-');return +dd+' '+MONTH[+m-1]});
   LAST=DAYS.length-1;F.d1=LAST;
   const dms=DAYS.map(d=>Date.parse(d+'T00:00:00Z'));DAYGAP=dms.map((t,i)=>i>0&&t-dms[i-1]>86400000);
-  PARTIAL=new Set(['2026-10-28','2026-11-04','2026-11-09','2026-11-15'].map(d=>DAYS.indexOf(d)).filter(i=>i>=0));
+  PARTIAL=new Set(['2026-10-28','2026-11-04','2026-11-09','2026-11-15','2026-11-23'].map(d=>DAYS.indexOf(d)).filter(i=>i>=0));
   // pages
   P_cat=Int8Array.from(PG.map(p=>p[2]));
   P_hm=PG.map(p=>p[0]==='/'?'home':(p[0]==='/games/all'||p[0].startsWith('/games/all/'))?'cat':p[0]==='/promo'?'promo':'');
@@ -83,13 +80,15 @@ async function loadData(){
 }
 
 /* ---------- filters ---------- */
-const F={d0:0,d1:9,dev:'all',au:'all',co:'all',sr:'all'};
+const F={d0:0,d1:9,dev:'all',au:'all',co:'all',sr:'all',bot:'hide'};
+// suspected bots: hide (default) | all | only
+function botPass(s){return F.bot==='all'||(F.bot==='hide'?!S_bt[s]:!!S_bt[s])}
 let MASK=null, ACT=null; // Uint8Array per session, Int32Array of active session indices
 function applyFilters(){
   MASK=new Uint8Array(NS);const out=[];
   const dv=F.dev==='all'?-1:+F.dev,au=F.au==='all'?-1:+F.au,co=F.co==='all'?-9:+F.co,sr=F.sr==='all'?-1:+F.sr;
   for(let s=0;s<NS;s++){
-    const d=S_d[s];if(d<F.d0||d>F.d1)continue;
+    const d=S_d[s];if(d<F.d0||d>F.d1)continue;if(!botPass(s))continue;
     if(dv>=0&&S_dv[s]!==dv)continue;if(au>=0&&S_au[s]!==au)continue;if(co!==-9&&S_co[s]!==co)continue;if(sr>=0&&S_sr[s]!==sr)continue;
     MASK[s]=1;out.push(s)}
   ACT=Int32Array.from(out);
@@ -146,7 +145,9 @@ function lineChart(host,{days,series,yfmt=fmt,height=230,unit=''}){
   for(let i=0;i<=4;i++){const v=max*i/4;s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end">${yfmt(v)}</text>`}
   // x labels: full «26 окт» when there is room, otherwise the day number with the month at the start of each run
   const step=days.length>1?(lay.x(1)-lay.x(0)):999,short=step<46;
-  days.forEach((d,i)=>{const runStart=i===0||lay.slots[i]-lay.slots[i-1]>1.01;const lab=short?(runStart?DAYL[d]:DAYL[d].split(' ')[0]):DAYL[d];
+  const isRS=i=>i===0||lay.slots[i]-lay.slots[i-1]>1.01;
+  days.forEach((d,i)=>{const runStart=isRS(i);const lab=short?(runStart?DAYL[d]:DAYL[d].split(' ')[0]):DAYL[d];
+    if(short&&!runStart&&isRS(i-1)&&step<40)return; // keep room for the «26 окт» label of the run start
     if(short&&step<20&&!runStart&&i%2)return;s+=`<text x="${lay.x(i)}" y="${H-9}" text-anchor="middle">${lab.replace(' ','\u00a0')}</text>`});
   // contiguous runs
   const runs=[];let cur=[];days.forEach((d,i)=>{if(i>0&&lay.slots[i]-lay.slots[i-1]>1.01){runs.push(cur);cur=[]}cur.push(i)});runs.push(cur);

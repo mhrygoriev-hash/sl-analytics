@@ -148,7 +148,8 @@ s['k']=s.event.map(etype)
 s['prevurl']=s.groupby('key').url.shift().fillna('')
 PAY=r'peaky|checkout|somosmach|transbank|paidpays|marvelpay|paycart|commercepay|khipu|payin|cashier|webpay'
 # 11–15.11: session_source is session-scoped, so only page_referrer marks a return from the gateway
-payret=(s.event=='page_view')&(s.succ!='')&(s.referrer.str.contains(PAY)|((s.file!='stat_clicks_pages_11.11_slottica.xlsx')&s.tsrc.str.contains(PAY)))
+SESS_SRC={'stat_clicks_pages_11.11_slottica.xlsx','stat_clicks_page_23.11_allbrands.xlsx'}
+payret=(s.event=='page_view')&(s.succ!='')&(s.referrer.str.contains(PAY)|((~s.file.isin(SESS_SRC))&s.tsrc.str.contains(PAY)))
 pr=s[payret].copy();pr['k']=np.where(pr.succ=='true',EV.index('pay_ok'),EV.index('pay_fail'));pr['t']=pr.t-0.001;pr['event']=np.where(pr.succ=='true','pay_ok','pay_fail');pr['elk']=pr.event
 ELD['pay_ok']=('pay_ok','Возврат с платёжки · success=true','Оплата','');ELD['pay_fail']=('pay_fail','Возврат с платёжки · success=false','Оплата','')
 ETY={k:None for k in ELD}
@@ -222,6 +223,17 @@ nclick=s[~s.event.isin(['page_view','cashbox_deposit','pay_ok','pay_fail'])].gro
 S['bounce']=((pvcount<=1)&(nclick==0)&((S.t1-S.t0)<10)).astype(int)
 F_BOUNCE=256
 S['fl']=S.fl|(S.bounce*F_BOUNCE)
+# ---------- suspected bots / synthetic monitoring ----------
+# desktop guests that come back 5+ times, see only the home page and do nothing but submit the registration form
+pvs=s[s.event=='page_view'].groupby('key').np.agg(lambda x:set(x)).reindex(S.index)
+homeonly=pvs.map(lambda p:isinstance(p,set) and p<={'/'})
+elsets=s[s.elk!=''].groupby('key').elk.agg(lambda x:set(x)).reindex(S.index)
+REGEL={'md_submit','md_close','md_int_close','md_int_reg'}
+regonly=elsets.map(lambda p:(not isinstance(p,set)) or p<=REGEL)
+ug=pd.DataFrame({'user':S.user,'auth':S.auth,'home':homeonly.astype(float),'reg':regonly.astype(float),'desk':(S.dev=='desktop').astype(float)}).groupby('user').agg(n=('auth','size'),auth=('auth','max'),home=('home','mean'),reg=('reg','mean'),desk=('desk','mean'))
+BOTU=set(ug[(ug.n>=5)&(ug.auth==0)&(ug.home>=.8)&(ug.reg>=.9)&(ug.desk==1)].index)
+S['bot']=S.user.isin(BOTU).astype(int)
+print('suspected bot users',len(BOTU),'sessions',int(S.bot.sum()))
 # frustration score 1..5
 cnt=lambda m:s[(s.f&m)>0].groupby('key').size().reindex(S.index).fillna(0)
 sc=1+np.minimum(cnt(F_RAGE),6)*0.6+np.minimum(cnt(F_REP),4)*0.35+np.minimum(cnt(F_UTURN),4)*0.6+np.minimum(cnt(F_QGAME),4)*0.3+np.minimum(cnt(F_PAYF),3)*1.2+cnt(F_ERR).clip(0,2)*1.2+np.minimum(cnt(F_REGX),3)*0.8+np.minimum(cnt(F_SRCH),4)*0.3
@@ -260,14 +272,14 @@ ED=E_t.copy();ED[1:]=E_t[1:]-E_t[:-1];ED[start]=E_t[start]
 assert (ED>=0).all()
 def ix(lst,v,fallback):return lst.index(v) if v in lst else fallback
 out={
- 'meta':{'days':DAYS,'base':'2026-10-26T00:00:00+02:00','dups':DUPS,'generated':'2026-11-17','scope':'slottica.com, все языки, бренд Slottica'},
+ 'meta':{'days':DAYS,'base':'2026-10-26T00:00:00+02:00','dups':DUPS,'generated':'2026-11-24','scope':'slottica.com, все языки, бренд Slottica'},
  'ev':EV,
  'pages':[[p,plabel(p),pcat(p)] for p in pages],
  'el':[['','','','',0]]+[list(ELD[k])+[int(ETY[k])] for k in ELK],
  'co':CO,'src':SRC,'lg':LG,'os':OSL,
  'S':{'d':S.day.tolist(),'t':(S.t0.values).astype(int).tolist(),'dur':np.round(S.t1-S.t0).astype(int).tolist(),'dv':S.devi.tolist(),'au':S.auth.astype(int).tolist(),
       'co':[ix(CO,c,-1) for c in S.country],'sr':[SRC.index(x) for x in S.src],'lg':[ix(LG,l,-1) for l in S.lang],'os':[ix(OSL,o,-1) for o in S.os],
-      'nw':S.new.tolist(),'u':[uidx[u] for u in S.user],'e0':start.astype(int).tolist(),'en':sizes.astype(int).tolist(),'sc':S.score.tolist(),'fl':S.fl.astype(int).tolist()},
+      'nw':S.new.tolist(),'u':[uidx[u] for u in S.user],'e0':start.astype(int).tolist(),'en':sizes.astype(int).tolist(),'sc':S.score.tolist(),'fl':S.fl.astype(int).tolist(),'bt':S.bot.astype(int).tolist()},
  'E':{'dt':ED.tolist(),'p':E_p.tolist(),'z':E_z.tolist(),'f':[[int(i),int(E_f[i])] for i in np.nonzero(E_f)[0]]}
 }
 js=json.dumps(out,ensure_ascii=False,separators=(',',':'))
