@@ -41,13 +41,14 @@ const SEVC={crit:'var(--crit)',serious:'var(--serious)',warn:'var(--warn)'};
 
 // data/sessions.json.gz (compressed, ~5× smaller) with a fallback to data/sessions.json
 async function fetchDB(){
-  let r=null;try{r=await fetch('data/sessions.json.gz')}catch(e){r=null}
+  // no-cache: revalidate with the server so a fresh export is picked up right after deploy (GitHub Pages caches files for 10 min)
+  let r=null;try{r=await fetch('data/sessions.json.gz',{cache:'no-cache'})}catch(e){r=null}
   if(r&&r.ok&&typeof DecompressionStream!=='undefined'){
     try{const buf=new Uint8Array(await r.arrayBuffer());
       if(buf[0]===0x1f&&buf[1]===0x8b){const ds=new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(ds).text())}
       return JSON.parse(new TextDecoder().decode(buf))}catch(e){/* fall back to plain JSON */}
   }
-  r=await fetch('data/sessions.json');if(!r.ok)throw new Error('HTTP '+r.status);
+  r=await fetch('data/sessions.json',{cache:'no-cache'});if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
 }
 async function loadData(){
